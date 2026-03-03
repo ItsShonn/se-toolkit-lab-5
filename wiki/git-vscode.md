@@ -37,10 +37,19 @@
 - [Push more commits](#push-more-commits)
   - [Push using the `VS Code Terminal`](#push-using-the-vs-code-terminal)
   - [Push using `GitLens`](#push-using-gitlens)
+- [What is `Git` in `VS Code`](#what-is-git-in-vs-code)
 - [Switch to a new branch](#switch-to-a-new-branch)
   - [Switch to a new branch using `GitHub`](#switch-to-a-new-branch-using-github)
   - [Switch to a new branch using the `VS Code Terminal`](#switch-to-a-new-branch-using-the-vs-code-terminal)
   - [Switch to a new branch using `GitLens`](#switch-to-a-new-branch-using-gitlens)
+
+## What is `Git` in `VS Code`
+
+`VS Code` has built-in [`Git`](./git.md#what-is-git) support and can be extended with [`GitLens`](./gitlens.md#what-is-gitlens) for advanced operations. This page covers common `Git` workflows in `VS Code`, including cloning, branching, committing, and pushing.
+
+Docs:
+
+- [`Git` support in `VS Code`](https://code.visualstudio.com/docs/sourcecontrol/overview)
 
 ## Clone the repository
 
@@ -81,7 +90,7 @@
    cd <directory-path>
    ```
 
-   The current directory in the [shell prompt](./shell.md#shell-prompt) should now end in `<directory-path>`
+   The current directory in the [shell prompt](./shell.md#shell-prompt) should now end in `<directory-path>`.
 
    Example:
 
@@ -111,7 +120,7 @@
    git clone https://github.com/microsoft/vscode
    ```
 
-6. If `git` asks for a password, provide [your `GitHub` PAT](./github.md#create-a-pat-classic).
+6. If `Git` asks for a password, provide [your `GitHub` PAT](./github.md#create-a-pat-classic).
 
 7. To verify that the repo was cloned,
 
@@ -159,7 +168,7 @@
    [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
 
    ```terminal
-   git switch <branch name>
+   git switch <branch>
    ```
 
    Example:
@@ -304,7 +313,7 @@ For each conflicting file, complete the following steps:
 ### Pull changes from `<branch>` on `<remote>` using `GitLens`
 
 1. [Run using the `Command Palette`](./vs-code.md#run-a-command-using-the-command-palette):
-   `GitLens: Pull`
+   `GitLens: Pull`.
 
 ## Pull changes from `<branch>` on `<remote>` and rebase
 
@@ -333,7 +342,7 @@ For each conflicting file, complete the following steps:
 ### Pull and rebase using `GitLens`
 
 1. [Run using the `Command Palette`](./vs-code.md#run-a-command-using-the-command-palette):
-   `GitLens: Pull`
+   `GitLens: Pull`.
 2. [Select](./vs-code.md#select-an-option-from-a-list)
    `Pull with Rebase`.
 3. If `GitLens` does not show any error, the rebase is complete.
@@ -385,20 +394,41 @@ For each conflicting file, complete the following steps:
 ### Commit using the `VS Code Terminal`
 
 1. Open the [`VS Code Terminal`](./vs-code.md#open-the-vs-code-terminal).
-2. To stage and commit your changes,
+2. To stage your changes,
 
    [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
 
    ```terminal
    git add <file-path>
-   # example: git add README.md
-   # example (path with spaces): git add 'path/some image.svg'
-
-   git commit -m '<type>: <short description>'
-   # example: git commit -m 'docs: add architecture diagram'
    ```
 
    See [`<file-path>`](./file-system.md#file-path).
+
+   Example:
+
+   ```terminal
+   git add README.md
+   ```
+
+   Example (path with spaces):
+
+   ```terminal
+   git add 'path/some image.svg'
+   ```
+
+3. To commit your changes,
+
+   [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
+
+   ```terminal
+   git commit -m '<type>: <short description>'
+   ```
+
+   Example:
+
+   ```terminal
+   git commit -m 'docs: add architecture diagram'
+   ```
 
 ### Commit using `Source Control`
 
@@ -425,37 +455,41 @@ For each conflicting file, complete the following steps:
 
 ### Undo commits using the `VS Code Terminal`
 
-To undo the last commit and keep the changes staged,
+1. To undo the last commit and keep the changes staged,
 
-[run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
+   [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
 
-```terminal
-git reset --soft HEAD~1
-```
+   ```terminal
+   git reset --soft HEAD~1
+   ```
 
-Your changes are staged now.
+   Your changes are staged now.
 
-To stage more changes,
+2. To stage more changes,
 
-[run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
+   [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
 
-```terminal
-git add some-file
-```
+   ```terminal
+   git add some-file
+   ```
 
-To commit using the previous message,
+3. To commit using the previous message,
 
-[run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
+   [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
 
-```terminal
-git commit -C ORIG_HEAD
-```
+   ```terminal
+   git commit -C ORIG_HEAD
+   ```
 
 ### Undo commits using `GitLens`
 
 See [Undo commit on the current branch](./gitlens.md#undo-a-commit-on-the-current-branch).
 
 ## Publish the branch
+
+<!-- no toc -->
+- Method 1: [Publish using the `VS Code Terminal`](#publish-using-the-vs-code-terminal)
+- Method 2: [Publish using `GitLens`](#publish-using-gitlens)
 
 ### Publish using the `VS Code Terminal`
 
@@ -476,6 +510,10 @@ See [Undo commit on the current branch](./gitlens.md#undo-a-commit-on-the-curren
 5. Press `Enter` to confirm.
 
 ## Push more commits
+
+<!-- no toc -->
+- Method 1: [Push using the `VS Code Terminal`](#push-using-the-vs-code-terminal)
+- Method 2: [Push using `GitLens`](#push-using-gitlens)
 
 ### Push using the `VS Code Terminal`
 
@@ -510,7 +548,7 @@ See [Undo commit on the current branch](./gitlens.md#undo-a-commit-on-the-curren
 2. [Create a branch](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/creating-a-branch-for-an-issue).
 3. Copy the command provided by `GitHub`.
 
-   It's looks like this:
+   It looks like this:
 
    ```terminal
    git fetch origin
