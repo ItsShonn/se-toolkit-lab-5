@@ -9,10 +9,11 @@ Both require HTTP Basic Auth (email + password from settings).
 
 from datetime import datetime
 
+import httpx
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.settings import settings
-
 
 # ---------------------------------------------------------------------------
 # Extract — fetch data from the autochecker API
@@ -22,7 +23,6 @@ from app.settings import settings
 async def fetch_items() -> list[dict]:
     """Fetch the lab/task catalog from the autochecker API.
 
-    TODO: Implement this function.
     - Use httpx.AsyncClient to GET {settings.autochecker_api_url}/api/items
     - Pass HTTP Basic Auth using settings.autochecker_email and
       settings.autochecker_password
@@ -31,13 +31,18 @@ async def fetch_items() -> list[dict]:
     - Return the parsed list of dicts
     - Raise an exception if the response status is not 200
     """
-    raise NotImplementedError
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{settings.autochecker_api_url}/api/items",
+            auth=(settings.autochecker_email, settings.autochecker_password),
+        )
+        response.raise_for_status()
+        return response.json()
 
 
 async def fetch_logs(since: datetime | None = None) -> list[dict]:
     """Fetch check results from the autochecker API.
 
-    TODO: Implement this function.
     - Use httpx.AsyncClient to GET {settings.autochecker_api_url}/api/logs
     - Pass HTTP Basic Auth using settings.autochecker_email and
       settings.autochecker_password
@@ -50,7 +55,33 @@ async def fetch_logs(since: datetime | None = None) -> list[dict]:
       - Use the submitted_at of the last log as the new "since" value
     - Return the combined list of all log dicts from all pages
     """
-    raise NotImplementedError
+    all_logs: list[dict] = []
+    current_since = since
+
+    async with httpx.AsyncClient() as client:
+        while True:
+            params: dict = {"limit": 500}
+            if current_since:
+                params["since"] = current_since.isoformat()
+
+            response = await client.get(
+                f"{settings.autochecker_api_url}/api/logs",
+                auth=(settings.autochecker_email, settings.autochecker_password),
+                params=params,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            logs = data["logs"]
+            all_logs.extend(logs)
+
+            if not data["has_more"]:
+                break
+
+            # Use the last log's submitted_at as the new since
+            current_since = datetime.fromisoformat(logs[-1]["submitted_at"])
+
+    return all_logs
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +92,6 @@ async def fetch_logs(since: datetime | None = None) -> list[dict]:
 async def load_items(items: list[dict], session: AsyncSession) -> int:
     """Load items (labs and tasks) into the database.
 
-    TODO: Implement this function.
     - Import ItemRecord from app.models.item
     - Process labs first (items where type="lab"):
       - For each lab, check if an item with type="lab" and matching title
@@ -79,7 +109,61 @@ async def load_items(items: list[dict], session: AsyncSession) -> int:
     - Commit after all inserts
     - Return the number of newly created items
     """
-    raise NotImplementedError
+    from app.models.item import ItemRecord
+
+    new_count = 0
+    lab_id_map: dict[str, ItemRecord] = {}
+
+    # Process labs first
+    for item in items:
+        if item["type"] != "lab":
+            continue
+
+        # Check if lab already exists
+        existing = await session.exec(
+            select(ItemRecord).where(
+                ItemRecord.type == "lab", ItemRecord.title == item["title"]
+            )
+        )
+        lab_record = existing.first()
+
+        if lab_record is None:
+            lab_record = ItemRecord(type="lab", title=item["title"])
+            session.add(lab_record)
+            new_count += 1
+
+        # Map the short lab ID (e.g., "lab-01") to the record
+        lab_id_map[item["lab"]] = lab_record
+
+    # Process tasks
+    for item in items:
+        if item["type"] != "task":
+            continue
+
+        # Find parent lab using the short ID
+        parent_lab = lab_id_map.get(item["lab"])
+        if parent_lab is None:
+            continue
+
+        # Check if task already exists
+        existing = await session.exec(
+            select(ItemRecord).where(
+                ItemRecord.type == "task",
+                ItemRecord.title == item["title"],
+                ItemRecord.parent_id == parent_lab.id,
+            )
+        )
+        task_record = existing.first()
+
+        if task_record is None:
+            task_record = ItemRecord(
+                type="task", title=item["title"], parent_id=parent_lab.id
+            )
+            session.add(task_record)
+            new_count += 1
+
+    await session.commit()
+    return new_count
 
 
 async def load_logs(
@@ -93,7 +177,6 @@ async def load_logs(
             short IDs (e.g. "lab-01", "setup") to item titles stored in the DB.
         session: Database session.
 
-    TODO: Implement this function.
     - Import Learner from app.models.learner
     - Import InteractionLog from app.models.interaction
     - Import ItemRecord from app.models.item
@@ -121,7 +204,79 @@ async def load_logs(
     - Commit after all inserts
     - Return the number of newly created interactions
     """
-    raise NotImplementedError
+    from app.models.interaction import InteractionLog
+    from app.models.item import ItemRecord
+    from app.models.learner import Learner
+
+    # Build lookup: (lab_short_id, task_short_id_or_none) -> item title
+    item_title_lookup: dict[tuple[str, str | None], str] = {}
+    for item in items_catalog:
+        lab_key = item["lab"]
+        task_key = item.get("task")
+        title = item["title"]
+        item_title_lookup[(lab_key, task_key)] = title
+
+    new_count = 0
+
+    for log in logs:
+        # 1. Find or create learner
+        learner = (
+            await session.exec(
+                select(Learner).where(Learner.external_id == log["student_id"])
+            )
+        ).first()
+
+        if learner is None:
+            learner = Learner(
+                external_id=log["student_id"], student_group=log["group"]
+            )
+            session.add(learner)
+            await session.flush()  # Get the learner.id
+
+        # 2. Find matching item
+        task_key = log.get("task")
+        item_title = item_title_lookup.get((log["lab"], task_key))
+
+        if item_title is None:
+            continue  # Skip if no matching item found
+
+        item = (
+            await session.exec(
+                select(ItemRecord).where(ItemRecord.title == item_title)
+            )
+        ).first()
+
+        if item is None:
+            continue  # Skip if item not in DB
+
+        # 3. Check if interaction already exists (idempotent)
+        existing_interaction = (
+            await session.exec(
+                select(InteractionLog).where(
+                    InteractionLog.external_id == log["id"]
+                )
+            )
+        ).first()
+
+        if existing_interaction is not None:
+            continue  # Skip if already exists
+
+        # 4. Create InteractionLog
+        interaction = InteractionLog(
+            external_id=log["id"],
+            learner_id=learner.id,
+            item_id=item.id,
+            kind="attempt",
+            score=log["score"],
+            checks_passed=log["passed"],
+            checks_total=log["total"],
+            created_at=datetime.fromisoformat(log["submitted_at"]),
+        )
+        session.add(interaction)
+        new_count += 1
+
+    await session.commit()
+    return new_count
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +287,6 @@ async def load_logs(
 async def sync(session: AsyncSession) -> dict:
     """Run the full ETL pipeline.
 
-    TODO: Implement this function.
     - Step 1: Fetch items from the API (keep the raw list) and load them
       into the database
     - Step 2: Determine the last synced timestamp
@@ -144,4 +298,29 @@ async def sync(session: AsyncSession) -> dict:
     - Return a dict: {"new_records": <number of new interactions>,
                       "total_records": <total interactions in DB>}
     """
-    raise NotImplementedError
+    from app.models.interaction import InteractionLog
+
+    # Step 1: Fetch and load items
+    raw_items = await fetch_items()
+    await load_items(raw_items, session)
+
+    # Step 2: Determine last synced timestamp
+    last_interaction = (
+        await session.exec(
+            select(InteractionLog)
+            .order_by(InteractionLog.created_at.desc())
+            .limit(1)
+        )
+    ).first()
+
+    since = last_interaction.created_at if last_interaction else None
+
+    # Step 3: Fetch and load logs
+    raw_logs = await fetch_logs(since=since)
+    new_records = await load_logs(raw_logs, raw_items, session)
+
+    # Get total count
+    total_result = await session.exec(select(InteractionLog))
+    total_records = len(total_result.all())
+
+    return {"new_records": new_records, "total_records": total_records}
