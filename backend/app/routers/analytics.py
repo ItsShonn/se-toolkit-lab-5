@@ -6,7 +6,7 @@ parameter to filter results by lab (e.g., "lab-01").
 """
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import case, func, distinct
+from sqlalchemy import case, func, distinct, Numeric
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -138,10 +138,11 @@ async def get_pass_rates(
         return []
     
     # Query: join tasks with interactions, group by task
+    # Cast avg to numeric for PostgreSQL round() function, use coalesce for null safety
     query = (
         select(
             ItemRecord.title.label("task"),
-            func.round(func.avg(InteractionLog.score), 1).label("avg_score"),
+            func.coalesce(func.round(func.avg(InteractionLog.score).cast(Numeric), 1), 0).label("avg_score"),
             func.count(InteractionLog.id).label("attempts")
         )
         .join(InteractionLog, InteractionLog.item_id == ItemRecord.id)
@@ -218,10 +219,11 @@ async def get_groups(
         return []
     
     # Query: join interactions with learners, group by group
+    # Cast avg to numeric for PostgreSQL round() function, use coalesce for null safety
     query = (
         select(
             Learner.student_group.label("group"),
-            func.round(func.avg(InteractionLog.score), 1).label("avg_score"),
+            func.coalesce(func.round(func.avg(InteractionLog.score).cast(Numeric), 1), 0).label("avg_score"),
             func.count(distinct(Learner.id)).label("students")
         )
         .join(InteractionLog, InteractionLog.learner_id == Learner.id)
